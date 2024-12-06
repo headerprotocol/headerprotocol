@@ -1,0 +1,4 @@
+{
+  "filter_paths": "(openzeppelin-contracts)",
+  "exclude_informational": true
+}

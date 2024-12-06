@@ -1,0 +1,42 @@
+{
+  "name": "@headerprotocol/contracts",
+  "description": "🧢 headerprotocol smart contracts",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "1.0.0",
+  "homepage": "https://github.com/headerprotocol",
+  "keywords": [
+    "headerprotocol",
+    "block",
+    "header",
+    "ethereum",
+    "rlp",
+    "parentHash",
+    "sha3Uncles",
+    "miner",
+    "stateRoot",
+    "transactionsRoot",
+    "receiptsRoot",
+    "logsBloom",
+    "difficulty",
+    "number",
+    "gasLimit",
+    "gasUsed",
+    "timestamp",
+    "extraData",
+    "mixHash",
+    "baseFeePerGas",
+    "withdrawalsRoot",
+    "blobGasUsed",
+    "excessBlobGas",
+    "parentBeaconBlockRoot",
+    "core",
+    "v1"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/headerprotocol/headerprotocol.git"
+  }
+}
