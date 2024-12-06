@@ -102,61 +102,114 @@ S --> S1[revert FunctionDoesNotExist]
 
 ### Integration Guide
 
-**Install:**
+#### Installation
 
-- `forge install headerprotocol/headerprotocol`
+To integrate the Header Protocol, install the package using Foundry:
 
-````
+```bash
+forge install headerprotocol/headerprotocol
+```
 
-**For Requesters (Consumers):**
+#### How It Works
 
-1. **Implement the `IHeader` interface** in your contract to handle the callback:
-   ```solidity
-   import {IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeader.sol";
-   import {IHeaderProtocol} from "@headerprotocol/contracts/v1/interfaces/IHeaderProtocol.sol";
+1. **Requesting a Block Header**:  
+   The consumer (requester) contract sends a request to the Header Protocol for a specific block header, optionally offering a reward.
 
-   contract MyConsumer is IHeader {
-       function responseBlockHeader(uint256 blockNumber, bytes calldata header) external override {
-           // Process the returned header
-       }
-   }
-````
+2. **Monitoring Requests**:  
+   Off-chain responders (providers) monitor the `BlockHeaderRequested` events emitted by the protocol.
 
-2. **Requesting a Header:**
+3. **Providing the Header**:  
+   Responders fetch the requested header off-chain, verify it, and then submit the valid header back to the protocol.
 
-   ```solidity
-   import {IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeader.sol";
-   import {IHeaderProtocol} from "@headerprotocol/contracts/v1/interfaces/IHeaderProtocol.sol";
+4. **Receiving a Callback**:  
+   Once the header is verified, the protocol calls the requester’s `responseBlockHeader` function with the header data.
 
-   contract MyConsumer is IHeader {
-      // ...
+#### Flow Diagram
 
-      function requestBlockHeader(uint256 blockNumber) external override {
-          // Suppose headerProtocol is at known address
-          IHeaderProtocol headerProtocol = IHeaderProtocol(headerProtocolAddress);
-          headerProtocol.request{value: 1 ether}(blockNumber);
-          // Offering 1 ether reward (optionally)
-      }
-   }
-   ```
+```mermaid
+sequenceDiagram
+    participant Consumer as Consumer Contract
+    participant Protocol as Header Protocol
+    participant Responder as Responder (Off-Chain)
 
-3. **Receiving a Callback:**
-   - When a valid header is supplied, `responseBlockHeader` is called on your contract with the verified header data.
+    Consumer->>Protocol: request(blockNumber)
+    Protocol->>Responder: Emit BlockHeaderRequested Event
+    Responder->>Responder: Fetch and Verify Block Header (Off-Chain)
+    Responder->>Protocol: response(blockNumber, headerData, requester)
+    Protocol->>Consumer: responseBlockHeader(blockNumber, header)
+```
 
-**For Responders (Providers):**
+#### For Requesters (Consumers)
 
-1. **Observing Requests:**
-   - Monitor `BlockHeaderRequested` events off-chain.
-   - If a request is profitable or interesting, fetch the block header off-chain.
-2. **Provide a Valid Header:**
-   ```solidity
-   headerProtocol.response(blockNumber, headerData, requesterAddress);
-   ```
-   - If verified, you earn the reward.
+##### Step 1: Request a Block Header
+
+Use the `IHeaderProtocol` interface to send a request for a block header. You can optionally include a reward in Ether to incentivize responders.
+
+```solidity
+import {IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeader.sol";
+import {IHeaderProtocol} from "@headerprotocol/contracts/v1/interfaces/IHeaderProtocol.sol";
+
+contract MyConsumer is IHeader {
+    address public headerProtocolAddress; // Set this to the known Header Protocol address
+
+    // Request a block header
+    function requestBlockHeader(uint256 blockNumber) external {
+        IHeaderProtocol headerProtocol = IHeaderProtocol(headerProtocolAddress);
+        headerProtocol.request{value: 1 ether}(blockNumber); // Optional: 1 ether reward
+    }
+
+    // Callback function to handle the response
+    function responseBlockHeader(uint256 blockNumber, bytes calldata header) external override {
+        // Handle the returned header
+    }
+}
+```
+
+##### Step 2: Receive the Header via Callback
+
+When a valid header is provided by a responder, the Header Protocol will call the `responseBlockHeader` function in your contract. Ensure proper validation and processing of the header data.
+
+```solidity
+function responseBlockHeader(uint256 blockNumber, bytes calldata header) external override {
+    // Process the returned header data (e.g., store it, verify it, etc.)
+}
+```
+
+#### For Responders (Providers)
+
+##### Step 1: Monitor Header Requests
+
+Responders should observe the `BlockHeaderRequested` events emitted by the protocol to identify new requests. Use tools like web3.js, ethers.js, or TheGraph for efficient event monitoring.
+
+##### Step 2: Fetch and Verify the Header
+
+Off-chain, fetch the requested block header using a blockchain node or service. Ensure the data is valid and meets the request's criteria.
+
+##### Step 3: Submit the Valid Header
+
+Responders submit the fetched and verified header to the protocol using the `response` function. If the header is valid, the protocol will transfer the reward to the responder.
+
+```solidity
+headerProtocol.response(blockNumber, headerData, requesterAddress);
+```
+
+#### Summary of Key Functions
+
+| **Role**      | **Function**                                                                         | **Description**                                                              |
+| ------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| **Requester** | `request(uint256 blockNumber)`                                                       | Sends a block header request to the protocol with an optional reward.        |
+| **Requester** | `responseBlockHeader(uint256 blockNumber, bytes calldata header)`                    | Callback function triggered when a valid header is provided.                 |
+| **Responder** | `response(uint256 blockNumber, bytes calldata headerData, address requesterAddress)` | Submits the requested header to the protocol to earn the reward if verified. |
+
+#### Notes
+
+- **Reward**: Offering a reward in `requestBlockHeader` is optional but encourages faster responses.
+- **Security**: Validate header data in `responseBlockHeader` to avoid processing malicious input.
+- **Monitoring Tools**: Use reliable tools for off-chain event monitoring to efficiently identify profitable requests.
 
 ### Testing
 
-- **Unit Tests with Foundry:**  
+- **Unit Tests with Foundry:**
   The contract is designed to be tested with Foundry (`forge test`). Tests should include scenarios for:
   - Requesting headers with/without rewards.
   - Providing valid/invalid headers.
@@ -166,9 +219,9 @@ S --> S1[revert FunctionDoesNotExist]
 
 ### Future Improvements
 
-- **Extended Block Verification:**  
+- **Extended Block Verification:**
   Could integrate light-client verification or external oracles for blocks older than 256 blocks.
-- **Custom Incentive Structures:**  
+- **Custom Incentive Structures:**
   Allow multiple requests for the same block to accumulate rewards, encouraging quicker responses.
 
 ---
