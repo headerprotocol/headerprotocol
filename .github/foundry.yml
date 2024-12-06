@@ -1,9 +1,8 @@
-name: CI
+name: Foundry
 
 on:
   push:
-  pull_request:
-  workflow_dispatch:
+    branches: [main]
 
 env:
   FOUNDRY_PROFILE: ci
@@ -40,6 +39,9 @@ jobs:
         id: build
 
       - name: Run Forge tests
-        run: |
-          forge test -vvv
+        run: forge test -vvv --gas-report
         id: test
+
+      - name: Run Forge coverage
+        run: forge coverage
+        id: coverage
