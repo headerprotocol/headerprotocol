@@ -1,5 +1,9 @@
 # Header Protocol
 
+<div style="text-align:center" align="center">
+    <img src="https://raw.githubusercontent.com/headerprotocol/headerprotocol/master/logo.png" width="400">
+</div>
+
 ```mermaid
 flowchart TD
 
