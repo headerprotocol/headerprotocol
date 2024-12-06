@@ -1,54 +1,25 @@
 # Header Protocol
 
 <div style="text-align:center" align="center">
-    <img src="https://raw.githubusercontent.com/headerprotocol/headerprotocol/master/logo.png" width="400">
+    <img src="https://raw.githubusercontent.com/headerprotocol/headerprotocol/master/logo.png" width="200">
 </div>
-
-```mermaid
-flowchart TD
-
-%% Nodes
-A[Start] --> B[Contract calls request with blockNumber and optional ETH]
-B -->|blockNumber == 0| B1[revert InvalidBlockNumber]
-B -->|Caller not a contract| B2[revert OnlyContracts]
-B -->|blockNumber <= historicLimit AND no header stored| B3[revert OutOfRecentBlockRange]
-B -->|Else| B4[Store reward if any, emit BlockHeaderRequested]
-B4 --> C[Request completed successfully]
-
-C --> D[An executor sees event and calls response with blockNumber, header, and requester]
-D -->|stored.header.length > 0| E[Caller receives stored header immediately]
-
-D -->|blockNumber == 0| D1[revert InvalidBlockNumber]
-D --> F[Load bh = blockhash for blockNumber]
-F -->|bh == 0| F1[revert FailedToObtainBlockHash]
-D -->|blockNumber > currentBlock OR blockNumber <= historicLimit| D2[revert OutOfRecentBlockRange]
-D -->|header.length == 0| D3[revert HeaderIsEmpty]
-
-F --> G[Check if bh matches RLP-derived hash of header]
-G -->|No match| G1[revert HeaderHashMismatch]
-
-G -->|Match found, header is valid| H[Check stored.reward]
-H -->|stored.reward > 0| I[Send reward to msg.sender]
-I -->|Send failed| I1[revert FailedToSendEther]
-
-I -->|Send successful| J[Store header into memory and call requester.responseBlockHeader]
-H -->|stored.reward == 0| K[Call requester.responseBlockHeader without reward]
-
-%% End states
-J --> L[Response completed successfully]
-K --> L[Response completed successfully]
-
-%% Additional edges for fallback/receive:
-C --> R[EOA sends ETH directly to contract]
-R --> R1[revert DirectPaymentsNotSupported]
-
-C --> S[Call unknown function on contract]
-S --> S1[revert FunctionDoesNotExist]
-```
 
 ### Overview
 
 `HeaderProtocol` is a Solidity smart contract that enables other contracts to request and receive verified Ethereum block headers. Contracts can request headers for a given block number, optionally offering a reward in Ether to any responder who provides a valid header. The protocol ensures that the provided header matches the `blockhash` of that block, ensuring its authenticity.
+
+```mermaid
+sequenceDiagram
+    participant Consumer as Consumer Contract
+    participant Protocol as Header Protocol
+    participant Responder as Responder (Off-Chain)
+
+    Consumer->>Protocol: request(blockNumber)
+    Protocol->>Responder: Emit BlockHeaderRequested Event
+    Responder->>Responder: Fetch and Verify Block Header (Off-Chain)
+    Responder->>Protocol: response(blockNumber, headerData, requester)
+    Protocol->>Consumer: responseBlockHeader(blockNumber, header)
+```
 
 ### Key Features
 
@@ -131,16 +102,45 @@ forge install headerprotocol/headerprotocol
 #### Flow Diagram
 
 ```mermaid
-sequenceDiagram
-    participant Consumer as Consumer Contract
-    participant Protocol as Header Protocol
-    participant Responder as Responder (Off-Chain)
+flowchart TD
 
-    Consumer->>Protocol: request(blockNumber)
-    Protocol->>Responder: Emit BlockHeaderRequested Event
-    Responder->>Responder: Fetch and Verify Block Header (Off-Chain)
-    Responder->>Protocol: response(blockNumber, headerData, requester)
-    Protocol->>Consumer: responseBlockHeader(blockNumber, header)
+%% Nodes
+A[Start] --> B[Contract calls request with blockNumber and optional ETH]
+B -->|blockNumber == 0| B1[revert InvalidBlockNumber]
+B -->|Caller not a contract| B2[revert OnlyContracts]
+B -->|blockNumber <= historicLimit AND no header stored| B3[revert OutOfRecentBlockRange]
+B -->|Else| B4[Store reward if any, emit BlockHeaderRequested]
+B4 --> C[Request completed successfully]
+
+C --> D[An executor sees event and calls response with blockNumber, header, and requester]
+D -->|stored.header.length > 0| E[Caller receives stored header immediately]
+
+D -->|blockNumber == 0| D1[revert InvalidBlockNumber]
+D --> F[Load bh = blockhash for blockNumber]
+F -->|bh == 0| F1[revert FailedToObtainBlockHash]
+D -->|blockNumber > currentBlock OR blockNumber <= historicLimit| D2[revert OutOfRecentBlockRange]
+D -->|header.length == 0| D3[revert HeaderIsEmpty]
+
+F --> G[Check if bh matches RLP-derived hash of header]
+G -->|No match| G1[revert HeaderHashMismatch]
+
+G -->|Match found, header is valid| H[Check stored.reward]
+H -->|stored.reward > 0| I[Send reward to msg.sender]
+I -->|Send failed| I1[revert FailedToSendEther]
+
+I -->|Send successful| J[Store header into memory and call requester.responseBlockHeader]
+H -->|stored.reward == 0| K[Call requester.responseBlockHeader without reward]
+
+%% End states
+J --> L[Response completed successfully]
+K --> L[Response completed successfully]
+
+%% Additional edges for fallback/receive:
+C --> R[EOA sends ETH directly to contract]
+R --> R1[revert DirectPaymentsNotSupported]
+
+C --> S[Call unknown function on contract]
+S --> S1[revert FunctionDoesNotExist]
 ```
 
 #### For Requesters (Consumers)
