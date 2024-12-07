@@ -150,11 +150,17 @@ S --> S1[revert FunctionDoesNotExist]
 Use the `IHeaderProtocol` interface to send a request for a block header. You can optionally include a reward in Ether to incentivize responders.
 
 ```solidity
-import {IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeader.sol";
 import {IHeaderProtocol} from "@headerprotocol/contracts/v1/interfaces/IHeaderProtocol.sol";
+import {IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeader.sol";
+import {RLPReader} from "@headerprotocol/contracts/v1/utils/RLPReader.sol";
 
 contract MyConsumer is IHeader {
-    address public headerProtocolAddress; // Set this to the known Header Protocol address
+    using RLPReader for RLPReader.RLPItem;
+    using RLPReader for RLPReader.Iterator;
+    using RLPReader for bytes;
+
+    address public headerProtocolAddress = address(0); // Set this to the known Header Protocol address
+    mapping(uint256 => uint256) public fee; // Block Number => Base Fee Per Gas
 
     // Request a block header
     function requestBlockHeader(uint256 blockNumber) external {
@@ -164,7 +170,10 @@ contract MyConsumer is IHeader {
 
     // Callback function to handle the response
     function responseBlockHeader(uint256 blockNumber, bytes calldata header) external override {
-        // Handle the returned header
+      RLPReader.RLPItem memory item = header.toRlpItem();
+      RLPReader.Iterator memory iterator = item.iterator();
+      for (uint256 i = 0; i < 15; i++) {iterator.next();}
+      if (fee[blockNumber] == 0) fee[blockNumber] = iterator.next().toUint(); // baseFeePerGas
     }
 }
 ```

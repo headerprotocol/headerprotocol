@@ -6,8 +6,8 @@ import {IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeader.sol";
 import {RLPReader} from "@headerprotocol/contracts/v1/utils/RLPReader.sol";
 
 /// @title HeaderProtocol
-/// @notice Allows contracts to request and receive verified Ethereum block headers.
-/// @dev Requesters post requests with optional Ether rewards. Responders verify and provide headers to earn rewards.
+/// @notice Implementation of the `IHeaderProtocol` interface to handle
+///         requests, responses, and refunds for Ethereum block headers.
 contract HeaderProtocol is IHeaderProtocol {
     using RLPReader for bytes;
     using RLPReader for RLPReader.RLPItem;
@@ -15,6 +15,7 @@ contract HeaderProtocol is IHeaderProtocol {
     //--------------------------------------------------------------------------
     // Errors
     //--------------------------------------------------------------------------
+
     error ReentrantCall();
     error OnlyContracts();
     error InvalidBlockNumber();
@@ -29,6 +30,7 @@ contract HeaderProtocol is IHeaderProtocol {
     //--------------------------------------------------------------------------
     // Events
     //--------------------------------------------------------------------------
+
     /// @notice Emitted when a block header request is created
     /// @param requester The requesting contract address
     /// @param blockNumber The requested block number
@@ -39,9 +41,18 @@ contract HeaderProtocol is IHeaderProtocol {
         uint256 reward
     );
 
+    /// @notice Emitted when a block header is successfully responded to
+    /// @param responder The address of the responder
+    /// @param blockNumber The block number of the responded header
+    event BlockHeaderResponded(
+        address indexed responder,
+        uint256 indexed blockNumber
+    );
+
     //--------------------------------------------------------------------------
     // Structs
     //--------------------------------------------------------------------------
+
     struct StoredHeader {
         address requester;
         bytes header;
@@ -51,12 +62,14 @@ contract HeaderProtocol is IHeaderProtocol {
     //--------------------------------------------------------------------------
     // State
     //--------------------------------------------------------------------------
+
     mapping(uint256 => StoredHeader) public headers;
     bool private _reentrancyGuard;
 
     //--------------------------------------------------------------------------
     // Modifiers
     //--------------------------------------------------------------------------
+
     modifier nonReentrant() {
         if (_reentrancyGuard) revert ReentrantCall();
         _reentrancyGuard = true;
@@ -74,13 +87,11 @@ contract HeaderProtocol is IHeaderProtocol {
     }
 
     //--------------------------------------------------------------------------
-    // Public/External Functions
+    // Implementation of IHeaderProtocol
     //--------------------------------------------------------------------------
 
     /**
-     * @notice Request a block header for a specific block number
-     * @dev If `msg.value > 0`, that Ether is a reward for providing the header.
-     * @param blockNumber The block number requested
+     * @inheritdoc IHeaderProtocol
      */
     function request(
         uint256 blockNumber
@@ -106,11 +117,7 @@ contract HeaderProtocol is IHeaderProtocol {
     }
 
     /**
-     * @notice Respond with a verified block header for a previously requested block
-     * @dev Checks if header already exists. If not, validates the provided header against blockhash.
-     * @param blockNumber The block number of the provided header
-     * @param header The block header RLP data
-     * @param requester The original requester
+     * @inheritdoc IHeaderProtocol
      */
     function response(
         uint256 blockNumber,
@@ -156,11 +163,37 @@ contract HeaderProtocol is IHeaderProtocol {
         } else {
             IHeader(requester).responseBlockHeader(blockNumber, header);
         }
+
+        emit BlockHeaderResponded(msg.sender, blockNumber);
+    }
+
+    /**
+     * @inheritdoc IHeaderProtocol
+     */
+    function refund(uint256 blockNumber) external nonReentrant {
+        StoredHeader storage stored = headers[blockNumber];
+
+        uint256 currentBlock = block.number;
+        uint256 historicLimit = currentBlock > 256 ? currentBlock - 256 : 0;
+
+        if (
+            blockNumber < historicLimit &&
+            stored.reward > 0 &&
+            stored.header.length == 0
+        ) {
+            uint256 reward = stored.reward;
+            stored.reward = 0;
+
+            // slither-disable-next-line arbitrary-send-eth low-level-calls
+            (bool sent, ) = payable(stored.requester).call{value: reward}("");
+            if (!sent) revert FailedToSendEther();
+        }
     }
 
     //--------------------------------------------------------------------------
     // Ether Handling
     //--------------------------------------------------------------------------
+
     receive() external payable {
         revert DirectPaymentsNotSupported();
     }
