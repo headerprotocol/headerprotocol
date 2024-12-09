@@ -3,375 +3,408 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import {HeaderProtocol} from "@headerprotocol/contracts/v1/HeaderProtocol.sol";
-import {IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeader.sol";
+import {IHeaderProtocol, IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeaderProtocol.sol";
 
-contract MockRequester is IHeader {
-    bytes public lastReceivedHeader;
-    uint256 public lastReceivedBlock;
+interface IHeaderProtocolExposed is IHeaderProtocol {
+    function headers(
+        uint256 blockNumber,
+        uint256 headerIndex
+    ) external view returns (bytes32);
+    function hashes(uint256 blockNumber) external view returns (bytes32);
+    function tasks(uint256 taskIndex) external view returns (Task memory);
+}
+
+contract MockConsumer is IHeader {
+    bytes32 public storedHeaderData;
+
+    receive() external payable {}
 
     function responseBlockHeader(
-        uint256 blockNumber,
-        bytes calldata header
+        uint256,
+        uint256,
+        bytes32 headerData
     ) external {
-        lastReceivedBlock = blockNumber;
-        lastReceivedHeader = header;
+        storedHeaderData = headerData;
     }
 }
 
-contract MockRequesterReentrant is IHeader {
-    HeaderProtocol public protocol;
-    uint256 public attemptReentrancyBlock;
-    bytes public lastReceivedHeader;
-    uint256 public lastReceivedBlock;
+contract ContractCaller is IHeader {
+    bytes32 public storedHeaderData;
+    uint256 public storedBlockNumber;
+    uint256 public storedHeaderIndex;
 
-    constructor(HeaderProtocol _protocol, uint256 _reentrancyBlock) {
-        protocol = _protocol;
-        attemptReentrancyBlock = _reentrancyBlock;
+    IHeaderProtocol private protocol;
+
+    constructor(address _protocol) {
+        protocol = IHeaderProtocol(_protocol);
+    }
+
+    receive() external payable {}
+
+    function requestHeader(
+        uint256 blockNumber,
+        uint256 headerIndex
+    ) external payable returns (uint256) {
+        storedBlockNumber = blockNumber;
+        storedHeaderIndex = headerIndex;
+        return protocol.request{value: msg.value}(blockNumber, headerIndex);
     }
 
     function responseBlockHeader(
         uint256 blockNumber,
-        bytes calldata header
+        uint256 headerIndex,
+        bytes32 headerData
     ) external {
-        lastReceivedBlock = blockNumber;
-        lastReceivedHeader = header;
-        // Attempt reentrancy if matches desired block
-        if (blockNumber == attemptReentrancyBlock) {
-            // This should trigger ReentrantCall if not properly guarded
-            protocol.response(blockNumber, header, address(this));
+        if (
+            blockNumber == storedBlockNumber && headerIndex == storedHeaderIndex
+        ) {
+            storedHeaderData = headerData;
         }
     }
 }
 
-contract MockResponderRevertsOnReceive {
-    // If this contract tries to receive Ether, it reverts
-    receive() external payable {
-        revert("No receive");
+contract MaliciousConsumer is IHeader {
+    function responseBlockHeader(uint256, uint256, bytes32) external pure {
+        revert("I always revert");
     }
-    fallback() external payable {
-        revert("No fallback");
+}
+
+contract NonPayableContract {
+    // no payable fallback or receive
+}
+
+contract RevertingReceiver {
+    IHeaderProtocol private protocol;
+
+    constructor(address _protocol) {
+        protocol = IHeaderProtocol(_protocol);
+    }
+
+    // revert on receive
+    receive() external payable {
+        revert("no receive");
+    }
+
+    function createPaidTask(
+        uint256 blockNumber,
+        uint256 headerIndex,
+        uint256 val
+    ) external payable returns (uint256) {
+        return protocol.request{value: val}(blockNumber, headerIndex);
     }
 }
 
 contract HeaderProtocolTest is Test {
-    HeaderProtocol internal headerProtocol;
-    MockRequester internal requester;
-    MockResponderRevertsOnReceive internal revertOnReceive;
-    address internal eoa;
-    bytes internal dummyHeader;
+    HeaderProtocol private protocol;
+    MockConsumer private consumer;
+    ContractCaller private contractCaller;
 
-    function setUp() external {
-        headerProtocol = new HeaderProtocol();
-        requester = new MockRequester();
-        revertOnReceive = new MockResponderRevertsOnReceive();
-        eoa = address(0x123);
-        dummyHeader = hex"1234";
+    // Provided test data
+    uint256 testBlockNumber = 21359530;
+    uint256 headerIndex = 15; // baseFeePerGas index
+    bytes32 fakeBlockHash =
+        0x05240b68dabd88b2aa91270112211762de2873306c0c5008d7c3621f1ce22b65;
+
+    // Provided RLP encoded block header from the given Python script
+    bytes blockHeader =
+        hex"f9024da005951b9add591b5a0d4411ecbaa282cc3bf0f6bb4095dcc5c979c1ca4c1d813ca01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794612d6b48eb86ba469d3e237ca610aa2a71dc9234a07e0ebb048bfdbdc1331f8ff17c3e7463c024edef642ad56594754875299a8350a0a97009f7f3ed3895bc57e4654c8f95a8294ccaf35c87a1f8f64721c1a053de77a020cb7c208f952db8f1ab6ed9976d63e7f763ade94820e4d7eabc19bbfc011ae8b9010011e800630fa0244118088310aa051d6610223101111110025219a012c00240234041a58c944100364e00b310800f8904163b8068ec8148004c480647012a8ba434011c0841100ca16926748982c5622a02020b2084404a087435c46081490b26c748614092cc6582244640112c40bcd10c1a006ab920a76803491337400316103948021102c0611400c11102411310a610019e414d50901cca31045a4c93902002aa942db80160a4611048c009098d4020240c4008b459a71c0100022888e341ab4011a25110015e50591477910890d4298808420000d13846804002836020c483b172391583856080cd81922c33800c66c0616800c40850cc2a22c2312c544580840145ebaa8401c9c3808373e32c846755e39780a01f59c2ad36a2fe1ae1669cd02d8dbc7fb156613ab0940e5ef746807f678be0a38800000000000000008502939b6d04a0d86d13bcc8747fe14885674a59e32f23690efe265cba04cf7a9a4904ed331115830a00008403dc0000a0763517c48f02ef97e4375cee60c49bb8cea82c401347d328e2e438ac6e019bb3";
+
+    receive() external payable {}
+
+    function setUp() public {
+        protocol = new HeaderProtocol();
+        consumer = new MockConsumer();
+        contractCaller = new ContractCaller(address(protocol));
+
+        vm.deal(address(contractCaller), 200 ether);
+
+        // Set the chain state
+        vm.roll(testBlockNumber);
+        vm.setBlockhash(testBlockNumber, fakeBlockHash);
+        // Now blockhash(testBlockNumber) == fakeBlockHash only after we move forward a block
     }
 
-    // Utility: Compute storage keys for headers mapping
-    function getHeadersBaseSlot(
-        uint256 blockNumber
-    ) internal pure returns (bytes32) {
-        // headers is the first state var, slot = 0
-        // key = keccak256(abi.encode(blockNumber, uint256(0)))
-        return keccak256(abi.encode(blockNumber, uint256(0)));
+    //--------------------------------------------------------------------------
+    // Helper
+    //--------------------------------------------------------------------------
+    function moveOneBlockPast(uint256 blockNum) internal {
+        // Make sure we can retrieve blockhash(blockNum)
+        vm.roll(blockNum + 1);
     }
 
-    function storeHeader(
-        uint256 blockNumber,
-        address _requester,
-        uint256 _reward,
-        bytes memory _header
-    ) internal {
-        bytes32 base = getHeadersBaseSlot(blockNumber);
+    function roll256BlocksLater(uint256 startBlock) internal {
+        vm.roll(startBlock + 300);
+    }
 
-        // StoredHeader layout:
-        // slot(base): requester (address) and part of struct packing if any
-        // slot(base+1): reward (uint256)
-        // header bytes:
-        // header slot = keccak256(base) for dynamic array
-        bytes32 headerSlot = keccak256(abi.encode(base));
+    //--------------------------------------------------------------------------
+    // Error checks
+    //--------------------------------------------------------------------------
 
-        // Store requester
-        vm.store(
-            address(headerProtocol),
-            base,
-            bytes32(uint256(uint160(_requester)))
-        );
+    function testRevertOnlyContractsWhenRequestFromEOA() public {
+        address eoa = address(0x1234);
+        vm.deal(eoa, 10 ether);
+        vm.startPrank(eoa);
+        vm.expectRevert(IHeaderProtocol.OnlyContracts.selector);
+        protocol.request{value: 1 ether}(testBlockNumber, headerIndex);
+        vm.stopPrank();
+    }
 
-        // Store reward
-        vm.store(
-            address(headerProtocol),
-            bytes32(uint256(base) + 1),
-            bytes32(_reward)
-        );
+    function testRevertInvalidBlockNumberFuture() public {
+        uint256 tooBig = type(uint40).max;
+        tooBig = tooBig + 1;
+        vm.expectRevert(IHeaderProtocol.InvalidBlockNumber.selector);
+        contractCaller.requestHeader(tooBig, headerIndex);
+    }
 
-        // Store header length
-        uint256 len = _header.length;
-        vm.store(address(headerProtocol), headerSlot, bytes32(len));
-
-        // Store header content
-        if (len > 0) {
-            bytes32 contentSlot = bytes32(uint256(headerSlot) + 1);
-            // For short headers <= 32 bytes, we can store in one slot
-            bytes32 data;
-            assembly {
-                data := mload(add(_header, 32))
-            }
-            // Mask data to length
-            uint256 mask = (len < 32) ? (256 ** (32 - len) - 1) : 0;
-            if (mask != 0) {
-                data = (data & ~bytes32(mask));
-            }
-            vm.store(address(headerProtocol), contentSlot, data);
+    function testRevertInvalidBlockNumberPastTooOld() public {
+        if (testBlockNumber > 256) {
+            uint256 oldBlock = testBlockNumber - 257;
+            vm.expectRevert(IHeaderProtocol.InvalidBlockNumber.selector);
+            contractCaller.requestHeader(oldBlock, headerIndex);
+        } else {
+            // If testBlockNumber <=256, skip this test scenario
+            // no revert expected
+            assertTrue(true);
         }
     }
 
-    // Test reverts and edge cases in request()
-    function test_Request_FromEOA_ShouldRevert() external {
-        vm.prank(eoa);
-        vm.expectRevert(HeaderProtocol.OnlyContracts.selector);
-        headerProtocol.request(100);
+    function testRevertInvalidHeaderIndex() public {
+        vm.expectRevert(IHeaderProtocol.InvalidHeaderIndex.selector);
+        contractCaller.requestHeader(testBlockNumber, 999999);
     }
 
-    function test_Request_InvalidBlockNumber() external {
-        vm.expectRevert(HeaderProtocol.InvalidBlockNumber.selector);
-        headerProtocol.request(0);
+    function testRevertRewardExceeds100ETH() public {
+        vm.expectRevert(IHeaderProtocol.RewardExceeds100ETH.selector);
+        contractCaller.requestHeader{value: 101 ether}(
+            testBlockNumber,
+            headerIndex
+        );
     }
 
-    function test_Request_OlderThan256Blocks_NoPreStoredHeader_ShouldRevert()
-        external
-    {
-        vm.roll(block.number + 300);
-        // old block definitely out of range
-        vm.expectRevert(HeaderProtocol.OutOfRecentBlockRange.selector);
-        headerProtocol.request(1);
+    function testRevertFailedToObtainBlockHashOnResponse() public {
+        // Request a free task for a future block with no blockhash
+        uint256 unknownBlock = testBlockNumber + 10;
+        contractCaller.requestHeader(unknownBlock, headerIndex);
+
+        vm.expectRevert(IHeaderProtocol.FailedToObtainBlockHash.selector);
+        // no move forward, blockhash unknownBlock is zero
+        protocol.response(
+            address(consumer),
+            unknownBlock,
+            headerIndex,
+            blockHeader
+        );
     }
 
-    function test_Request_ValidFromContract_NoReward() external {
-        uint256 bn = block.number;
-        headerProtocol.request(bn);
-        (
-            address storedRequester,
-            bytes memory storedHeader,
-            uint256 storedReward
-        ) = headerProtocol.headers(bn);
-        assertEq(storedRequester, address(0), "No requester stored");
-        assertEq(storedHeader.length, 0, "No header stored");
-        assertEq(storedReward, 0, "No reward stored");
+    function testRevertBlockHeaderIsEmptyOnResponse() public {
+        contractCaller.requestHeader(testBlockNumber, headerIndex);
+        moveOneBlockPast(testBlockNumber); // Now blockhash(testBlockNumber) known
+        bytes memory emptyHeader = hex"";
+        vm.expectRevert(IHeaderProtocol.BlockHeaderIsEmpty.selector);
+        protocol.response(
+            address(consumer),
+            testBlockNumber,
+            headerIndex,
+            emptyHeader
+        );
     }
 
-    function test_Request_ValidFromContract_WithReward() external {
-        uint256 bn = block.number;
-        headerProtocol.request{value: 1 ether}(bn);
-        (
-            address storedRequester,
-            bytes memory storedHeader,
-            uint256 storedReward
-        ) = headerProtocol.headers(bn);
-        assertEq(storedRequester, address(this), "Requester stored");
-        assertEq(storedHeader.length, 0, "No header yet");
-        assertEq(storedReward, 1 ether, "Reward set");
+    function testRevertHeaderHashMismatch() public {
+        contractCaller.requestHeader(testBlockNumber, headerIndex);
+        moveOneBlockPast(testBlockNumber);
+        bytes memory wrongHeader = hex"f9010a808080";
+        vm.expectRevert(IHeaderProtocol.HeaderHashMismatch.selector);
+        protocol.response(
+            address(consumer),
+            testBlockNumber,
+            headerIndex,
+            wrongHeader
+        );
     }
 
-    // Test response() error paths
-    function test_Response_InvalidBlockNumber() external {
-        vm.expectRevert(HeaderProtocol.InvalidBlockNumber.selector);
-        headerProtocol.response(0, hex"01", address(requester));
+    function testRevertHeaderDataIsEmpty() public {
+        // extraData is at index 12 and it's empty in the provided header (HexBytes("0x"),  # extraData)
+        uint256 emptyIndex = 12;
+        contractCaller.requestHeader(testBlockNumber, emptyIndex);
+        moveOneBlockPast(testBlockNumber);
+        vm.expectRevert(IHeaderProtocol.HeaderDataIsEmpty.selector);
+        protocol.response(
+            address(consumer),
+            testBlockNumber,
+            emptyIndex,
+            blockHeader
+        );
     }
 
-    function test_Response_OutOfRangeBlock() external {
-        vm.roll(500);
-        vm.expectRevert(HeaderProtocol.OutOfRecentBlockRange.selector);
-        headerProtocol.response(200, hex"1234", address(requester));
+    function testRevertExternalCallFailed() public {
+        MaliciousConsumer badConsumer = new MaliciousConsumer();
+        contractCaller.requestHeader(testBlockNumber, headerIndex);
+        moveOneBlockPast(testBlockNumber);
+        vm.expectRevert(IHeaderProtocol.ExternalCallFailed.selector);
+        protocol.response(
+            address(badConsumer),
+            testBlockNumber,
+            headerIndex,
+            blockHeader
+        );
     }
 
-    function test_Response_HeaderIsEmpty() external {
-        uint256 bn = block.number;
-        headerProtocol.request(bn);
-        vm.expectRevert(HeaderProtocol.HeaderIsEmpty.selector);
-        headerProtocol.response(bn, "", address(requester));
+    function testRevertTaskIsNonRefundable() public {
+        uint256 taskIndex = contractCaller.requestHeader{value: 1 ether}(
+            testBlockNumber,
+            headerIndex
+        );
+        // Still completable, blockhash known
+        vm.expectRevert(IHeaderProtocol.TaskIsNonRefundable.selector);
+        protocol.refund(taskIndex);
     }
 
-    function test_Response_FailedToObtainBlockHash() external {
-        uint256 bn = block.number;
-        headerProtocol.request(bn);
-        // blockhash(bn) == 0 here because bn == current block
-        vm.expectRevert(HeaderProtocol.FailedToObtainBlockHash.selector);
-        headerProtocol.response(bn, hex"1234", address(requester));
+    function testRevertDirectPaymentsNotSupported() public {
+        vm.expectRevert(IHeaderProtocol.DirectPaymentsNotSupported.selector);
+        payable(address(protocol)).transfer(1 ether);
     }
 
-    function test_Response_HeaderHashMismatch() external {
-        vm.roll(block.number + 1);
-        uint256 bn = block.number - 1;
-        headerProtocol.request(bn);
-        vm.expectRevert(HeaderProtocol.HeaderHashMismatch.selector);
-        headerProtocol.response(bn, hex"deadbeef", address(requester));
-    }
-
-    // Test fallback & receive
-    function test_DirectPaymentsNotSupported() external {
-        vm.expectRevert(HeaderProtocol.DirectPaymentsNotSupported.selector);
-        (bool success, ) = address(headerProtocol).call{value: 1 ether}("");
-        success; // revert expected
-    }
-
-    function test_CallNonExistentFunction() external {
-        vm.expectRevert(HeaderProtocol.FunctionDoesNotExist.selector);
-        (bool success, ) = address(headerProtocol).call(
+    function testRevertFunctionDoesNotExistFallback() public {
+        vm.expectRevert(IHeaderProtocol.FunctionDoesNotExist.selector);
+        (bool success, ) = address(protocol).call(
             abi.encodeWithSignature("nonExistentFunction()")
         );
         success;
     }
 
-    function test_Response_WithoutRequest_ShouldJustVerifyInputs() external {
-        vm.expectRevert(HeaderProtocol.InvalidBlockNumber.selector);
-        headerProtocol.response(0, hex"011a0a", address(requester));
+    //--------------------------------------------------------------------------
+    // Success scenarios
+    //--------------------------------------------------------------------------
+
+    function testFreeTaskRequestAndResponse() public {
+        uint256 taskIndex = contractCaller.requestHeader(
+            testBlockNumber,
+            headerIndex
+        );
+        assertEq(taskIndex, 0);
+        moveOneBlockPast(testBlockNumber);
+        protocol.response(
+            address(consumer),
+            testBlockNumber,
+            headerIndex,
+            blockHeader
+        );
+
+        assertTrue(consumer.storedHeaderData() != bytes32(0));
     }
 
-    // // Now test success scenarios by simulating a stored header to skip hash checks
+    function testPaidTaskRequestAndResponse() public {
+        uint256 taskIndex = contractCaller.requestHeader{value: 1 ether}(
+            testBlockNumber,
+            headerIndex
+        );
+        assertTrue(taskIndex > 0);
 
-    // // Success scenario without reward:
-    // // 1) Request a block
-    // // 2) Simulate a successful response by storing a header directly.
-    // // 3) Call response again with a different requester, should return stored header immediately.
-    // function test_Response_SuccessNoReward() external {
-    //     uint256 bn = block.number + 10; // arbitrary
-    //     headerProtocol.request(bn); // no reward
+        moveOneBlockPast(testBlockNumber);
 
-    //     // Simulate that a correct header was already provided:
-    //     storeHeader(bn, address(0), 0, dummyHeader);
+        // Executor is this contract, must receive Ether
+        uint256 beforeBalance = address(this).balance;
+        protocol.response(taskIndex, blockHeader);
+        uint256 afterBalance = address(this).balance;
 
-    //     // Another requester tries to get this header
-    //     MockRequester anotherReq = new MockRequester();
-    //     headerProtocol.response(bn, hex"696e76616c6964", address(anotherReq));
-    //     assertEq(anotherReq.lastReceivedBlock(), bn, "Got stored header");
-    //     assertEq(
-    //         anotherReq.lastReceivedHeader(),
-    //         dummyHeader,
-    //         "Stored header returned"
-    //     );
-    // }
+        // got paid 1 ether
+        assertEq(afterBalance - beforeBalance, 1 ether);
 
-    // // Success scenario with reward:
-    // // 1) Request with reward
-    // // 2) Simulate stored header and reward
-    // // 3) Call response from a responder contract to get paid
-    // function test_Response_SuccessWithReward() external {
-    //     uint256 bn = block.number + 20;
-    //     headerProtocol.request{value: 1 ether}(bn);
+        assertEq(contractCaller.storedBlockNumber(), testBlockNumber);
+        assertEq(contractCaller.storedHeaderIndex(), headerIndex);
+        assertTrue(contractCaller.storedHeaderData() != bytes32(0));
 
-    //     // Simulate a verified header is already stored:
-    //     storeHeader(bn, address(this), 1 ether, dummyHeader);
+        bytes32 storedHeader = IHeaderProtocolExposed(address(protocol))
+            .headers(testBlockNumber, headerIndex);
+        assertTrue(storedHeader != bytes32(0));
+    }
 
-    //     // Now call response from a different address:
-    //     address responder = address(0xabc);
-    //     vm.deal(address(headerProtocol), 1 ether); // ensure contract has the reward
-    //     vm.startPrank(responder);
-    //     uint256 balanceBefore = responder.balance;
-    //     headerProtocol.response(bn, hex"1122", address(requester));
-    //     uint256 balanceAfter = responder.balance;
-    //     vm.stopPrank();
+    function testPaidTaskAlreadyStoredHeader() public {
+        // First paid task
+        uint256 firstTaskIndex = contractCaller.requestHeader{value: 1 ether}(
+            testBlockNumber,
+            headerIndex
+        );
+        moveOneBlockPast(testBlockNumber);
+        protocol.response(firstTaskIndex, blockHeader);
 
-    //     assertEq(balanceAfter, balanceBefore + 1 ether, "Responder got paid");
-    //     assertEq(requester.lastReceivedBlock(), bn, "Requester got the header");
-    //     assertEq(
-    //         requester.lastReceivedHeader(),
-    //         dummyHeader,
-    //         "Correct stored header"
-    //     );
-    // }
+        // Another task for same block/headerIndex
+        uint256 secondTaskIndex = contractCaller.requestHeader{value: 1 ether}(
+            testBlockNumber,
+            headerIndex
+        );
 
-    // // FailedToSendEther scenario:
-    // // If responder reverts on receive:
-    // // We'll simulate stored header with a reward and try to respond from revertOnReceive
-    // function test_Response_FailedToSendEther() external {
-    //     uint256 bn = block.number + 30;
-    //     headerProtocol.request{value: 1 ether}(bn);
+        // Move another block
+        vm.roll(block.number + 1);
+        uint256 executorBefore = address(this).balance;
+        protocol.response(secondTaskIndex, blockHeader);
+        uint256 executorAfter = address(this).balance;
+        assertEq(executorAfter, executorBefore); // no extra payment
 
-    //     // Simulate stored header and reward
-    //     storeHeader(bn, address(this), 1 ether, dummyHeader);
-    //     vm.deal(address(headerProtocol), 1 ether);
+        assertEq(contractCaller.storedBlockNumber(), testBlockNumber);
+        assertEq(contractCaller.storedHeaderIndex(), headerIndex);
+    }
 
-    //     vm.startPrank(address(revertOnReceive));
-    //     vm.expectRevert(HeaderProtocol.FailedToSendEther.selector);
-    //     headerProtocol.response(bn, dummyHeader, address(requester));
-    //     vm.stopPrank();
-    // }
+    function testCommitAndCompleteAfter256Blocks() public {
+        uint256 futureBlock = testBlockNumber + 300;
+        uint256 taskIndex = contractCaller.requestHeader{value: 1 ether}(
+            futureBlock,
+            headerIndex
+        );
 
-    // // AlreadyStoredHeader scenario:
-    // // Covered by test_Response_SuccessNoReward. But let's show old block scenario:
-    // function test_Response_OldBlockWithStoredHeader() external {
-    //     uint256 bn = block.number + 40;
-    //     headerProtocol.request{value: 1 ether}(bn);
+        // Advance to futureBlock
+        vm.roll(futureBlock);
+        vm.setBlockhash(futureBlock, fakeBlockHash);
+        moveOneBlockPast(futureBlock);
 
-    //     storeHeader(bn, address(this), 1 ether, dummyHeader);
-    //     vm.deal(address(headerProtocol), 1 ether);
+        // commit blockhash
+        protocol.commit(futureBlock);
+        assertEq(
+            IHeaderProtocolExposed(address(protocol)).hashes(futureBlock),
+            fakeBlockHash
+        );
 
-    //     // Advance over 256 blocks
-    //     vm.roll(block.number + 300);
+        // Roll another 300 blocks
+        roll256BlocksLater(futureBlock);
 
-    //     // Another requester tries to get header:
-    //     MockRequester anotherReq = new MockRequester();
-    //     headerProtocol.response(bn, hex"112233", address(anotherReq));
-    //     assertEq(anotherReq.lastReceivedBlock(), bn);
-    //     assertEq(anotherReq.lastReceivedHeader(), dummyHeader);
-    // }
+        // now respond
+        uint256 beforeBal = address(this).balance;
+        protocol.response(taskIndex, blockHeader);
+        uint256 afterBal = address(this).balance;
+        assertEq(afterBal - beforeBal, 1 ether);
 
-    // // ReentrantCall scenario:
-    // // If `responseBlockHeader` calls `response()` again on same block, it should revert.
-    // // We'll simulate stored header so no hash check is needed.
-    // function test_Response_ReentrantCall() external {
-    //     uint256 bn = block.number + 50;
-    //     headerProtocol.request(bn);
-    //     // Simulate stored header
-    //     storeHeader(bn, address(this), 0, dummyHeader);
+        assertEq(contractCaller.storedBlockNumber(), futureBlock);
+        assertEq(contractCaller.storedHeaderIndex(), headerIndex);
+        assertTrue(contractCaller.storedHeaderData() != bytes32(0));
+    }
 
-    //     MockRequesterReentrant reentrantReq = new MockRequesterReentrant(
-    //         headerProtocol,
-    //         bn
-    //     );
-    //     vm.expectRevert(HeaderProtocol.ReentrantCall.selector);
-    //     headerProtocol.response(bn, hex"4455", address(reentrantReq));
-    // }
+    function testRefundAfter256BlocksNoCommitNoHash() public {
+        vm.deal(address(consumer), 10 ether);
+        vm.startPrank(address(consumer));
+        uint256 oldBlock = testBlockNumber - 1;
+        vm.roll(oldBlock);
+        vm.setBlockhash(oldBlock, bytes32("somehash"));
+        moveOneBlockPast(oldBlock);
 
-    // // Cover the scenario where a stored header with no reward triggers the else branch:
-    // // Already tested in test_Response_SuccessNoReward, but that scenario had no reward.
-    // // Let's explicitly test an already stored header with no reward:
-    // function test_Response_StoredHeader_NoRewardAgain() external {
-    //     uint256 bn = block.number + 60;
-    //     headerProtocol.request(bn); // no reward
-    //     storeHeader(bn, address(this), 0, dummyHeader);
+        // now request from consumer
+        uint256 taskIndex = protocol.request{value: 1 ether}(
+            oldBlock,
+            headerIndex
+        );
+        vm.stopPrank();
 
-    //     // Respond again from a random address
-    //     address someAddr = address(0xdead);
-    //     vm.startPrank(someAddr);
-    //     headerProtocol.response(bn, hex"1122", address(requester));
-    //     vm.stopPrank();
+        // roll far ahead
+        roll256BlocksLater(oldBlock);
+        // set blockhash(oldBlock)=0 (no commit)
+        vm.setBlockhash(oldBlock, bytes32(0));
 
-    //     assertEq(requester.lastReceivedBlock(), bn);
-    //     assertEq(requester.lastReceivedHeader(), dummyHeader);
-    // }
+        bool refundable = protocol.isRefundable(taskIndex);
+        assertTrue(refundable);
 
-    // // Another test for stored header with reward already given out:
-    // // After first payout, no second payout occurs, but we still get the header.
-    // // Simulate the scenario where reward was paid out (set reward=0 after)
-    // function test_Response_StoredHeader_AfterPayout() external {
-    //     uint256 bn = block.number + 70;
-    //     // Suppose initially requested with reward:
-    //     headerProtocol.request{value: 1 ether}(bn);
-
-    //     // Simulate a scenario after payout: header stored, reward=0
-    //     storeHeader(bn, address(this), 0, dummyHeader);
-
-    //     // Now responding again should just return the header, no payment
-    //     uint256 balanceBefore = address(this).balance;
-    //     headerProtocol.response(bn, hex"5566", address(requester));
-    //     uint256 balanceAfter = address(this).balance;
-    //     assertEq(balanceAfter, balanceBefore, "No additional payment");
-    //     assertEq(requester.lastReceivedBlock(), bn);
-    //     assertEq(requester.lastReceivedHeader(), dummyHeader);
-    // }
-
-    receive() external payable {}
+        uint256 consumerBalBefore = address(consumer).balance;
+        protocol.refund(taskIndex);
+        uint256 consumerBalAfter = address(consumer).balance;
+        // consumer requested, consumer receives refund
+        assertEq(consumerBalAfter - consumerBalBefore, 1 ether);
+    }
 }
