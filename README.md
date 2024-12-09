@@ -1,4 +1,4 @@
-# **Header Protocol**: On-Chain Ethereum Block Header Service
+# **Header Protocol**: On-Chain Block Header Service
 
 <div style="text-align:center" align="center">
     <img src="https://raw.githubusercontent.com/headerprotocol/headerprotocol/master/logo.png" width="200">
