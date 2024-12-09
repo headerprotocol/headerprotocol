@@ -77,7 +77,7 @@ Block headers contain an array of fields. Each field corresponds to an index, as
 | 9         | `gasLimit`              | `uint256`  | Gas limit for the block.                                |
 | 10        | `gasUsed`               | `uint256`  | Gas used by the block.                                  |
 | 11        | `timestamp`             | `uint256`  | Timestamp of the block.                                 |
-| 12        | `extraData`             | `bytes`    | Extra data field of the block.                          |
+| \_        | `extraData`             | `bytes`    | Extra data field of the block (can't get onchain).      |
 | 13        | `mixHash`               | `bytes32`  | Mix hash used for proof-of-work.                        |
 | 14        | `nonce`                 | `uint64`   | Nonce used for mining the block.                        |
 | 15        | `baseFeePerGas`         | `uint256`  | Base fee per gas unit for the block (EIP-1559).         |
