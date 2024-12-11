@@ -79,13 +79,13 @@ interface IHeaderProtocol {
     /// @param contractAddress The contract requesting the header data.
     /// @param blockNumber The number of the block for which the header is requested.
     /// @param headerIndex The index of the header field requested.
-    /// @param feeAmount The fee (in wei) offered as a reward for fulfilling the request.
+    /// @param rewardAmount The fee (in wei) offered as a reward for fulfilling the request.
     ///                  If zero, this is a free request with no reward.
     event BlockHeaderRequested(
         address indexed contractAddress,
         uint256 indexed blockNumber,
         uint256 indexed headerIndex,
-        uint256 feeAmount
+        uint256 rewardAmount
     );
 
     /// @notice Emitted when a block header request is successfully fulfilled.
