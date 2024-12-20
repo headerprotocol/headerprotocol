@@ -173,7 +173,7 @@ contract MockHeader is IHeader {
         uint256 blockNumber,
         uint256 headerIndex
     ) external payable {
-        protocol.request{value: msg.value}(blockNumber, headerIndex);
+        protocol.request(blockNumber, headerIndex);
     }
 
     // required implementation of IHeader
