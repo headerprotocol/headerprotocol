@@ -29,46 +29,46 @@ interface IHeaderProtocol {
     // Errors
     //--------------------------------------------------------------------------
 
-    /// @notice Thrown if a reentrant call is detected.
+    /// @notice Thrown if a reentrant call is detected. (0x37ed32e8)
     error ReentrantCall();
 
-    /// @notice Thrown when an externally-owned account (EOA) tries to call a function restricted to contracts.
+    /// @notice Thrown when an externally-owned account (EOA) tries to call a function restricted to contracts. (0xc9e43435)
     error OnlyContracts();
 
-    /// @notice Thrown if the `blockNumber` is invalid (e.g., in the past, beyond certain limits, or not acceptable by the protocol).
+    /// @notice Thrown if the `blockNumber` is invalid (e.g., in the past, beyond certain limits, or not acceptable by the protocol). (0x4e47846c)
     error InvalidBlockNumber();
 
-    /// @notice Thrown if the `headerIndex` exceeds the allowed range.
+    /// @notice Thrown if the `headerIndex` exceeds the allowed range. (0x9e2ada3e)
     error InvalidHeaderIndex();
 
-    /// @notice Thrown if the reward (msg.value) exceeds the allowed maximum (e.g., 18 ETH as per the new implementation).
+    /// @notice Thrown if the reward (msg.value) exceeds the allowed maximum (e.g., 18 ETH as per the new implementation). (0x9a2b3740)
     error RewardExceedTheLimit();
 
-    /// @notice Thrown if obtaining `blockhash` for the requested block fails (e.g., due to the 256-block limit and no commit).
+    /// @notice Thrown if obtaining `blockhash` for the requested block fails (e.g., due to the 256-block limit and no commit). (0x492f3af3)
     error FailedToObtainBlockHash();
 
-    /// @notice Thrown if the provided block header data is empty.
+    /// @notice Thrown if the provided block header data is empty. (0xc82ed187)
     error BlockHeaderIsEmpty();
 
-    /// @notice Thrown if the provided block header does not match the expected hash.
+    /// @notice Thrown if the provided block header does not match the expected hash. (0x7b612202)
     error HeaderHashMismatch();
 
-    /// @notice Thrown if the requested header field is empty (no data found in the RLP).
+    /// @notice Thrown if the requested header field is empty (no data found in the RLP). (0x070adae8)
     error HeaderDataIsEmpty();
 
-    /// @notice Thrown if the task (paid request) cannot be refunded (conditions for refund not met).
+    /// @notice Thrown if the task (paid request) cannot be refunded (conditions for refund not met). (0xea5d98ba)
     error TaskIsNonRefundable();
 
-    /// @notice Thrown if the callback call to the requesting contract fails.
+    /// @notice Thrown if the callback call to the requesting contract fails. (0x350c20f1)
     error ExternalCallFailed();
 
-    /// @notice Thrown if sending Ether fails.
+    /// @notice Thrown if sending Ether fails. (0xdcf35db0)
     error FailedToSendEther();
 
-    /// @notice Thrown if Ether is sent directly to the protocol contract without using the designated functions.
+    /// @notice Thrown if Ether is sent directly to the protocol contract without using the designated functions. (0xc810c998)
     error DirectPaymentsNotSupported();
 
-    /// @notice Thrown if a called function does not exist.
+    /// @notice Thrown if a called function does not exist. (0xa9ad62f8)
     error FunctionDoesNotExist();
 
     //--------------------------------------------------------------------------
@@ -89,13 +89,15 @@ interface IHeaderProtocol {
     );
 
     /// @notice Emitted when a block header request is successfully fulfilled.
-    /// @param responder The address of the executor who provided the header.
+    /// @param contractAddress The contract requesting the header data (for private tasks).
     /// @param blockNumber The number of the block that was fulfilled.
     /// @param headerIndex The index of the header field retrieved.
+    /// @param responder The address of the executor who provided the header.
     event BlockHeaderResponded(
-        address indexed responder,
+        address indexed contractAddress,
         uint256 indexed blockNumber,
-        uint256 indexed headerIndex
+        uint256 headerIndex,
+        address indexed responder
     );
 
     /// @notice Emitted when a blockhash is successfully committed.

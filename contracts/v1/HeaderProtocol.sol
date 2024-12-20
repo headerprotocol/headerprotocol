@@ -144,6 +144,12 @@ contract HeaderProtocol is IHeaderProtocol, ReentrancyGuard {
 
         if (_isHeader(storedHeader)) {
             _call(blockNumber, headerIndex, contractAddress, storedHeader);
+            emit BlockHeaderResponded(
+                contractAddress,
+                blockNumber,
+                headerIndex,
+                msg.sender
+            );
             return;
         }
 
@@ -190,7 +196,12 @@ contract HeaderProtocol is IHeaderProtocol, ReentrancyGuard {
             _call(blockNumber, headerIndex, contractAddress, computedHeader); // send free task
         }
 
-        emit BlockHeaderResponded(msg.sender, blockNumber, headerIndex);
+        emit BlockHeaderResponded(
+            _rewardAmount > 0 ? _contractAddress : contractAddress,
+            blockNumber,
+            headerIndex,
+            msg.sender
+        );
     }
 
     function _commit(uint256 blockNumber) internal {

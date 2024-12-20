@@ -151,75 +151,87 @@ function getHash(uint256 blockNumber) external view returns (bytes32);
 
 ## Examples
 
-### Full Free Example
+### Full Open Example
 
 ```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
 import {IHeaderProtocol, IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeaderProtocol.sol";
 
-contract MyContract is IHeader {
-   IHeaderProtocol private protocol;
+contract MockHeader is IHeader {
+    IHeaderProtocol private protocol;
 
-   // blockNumber => headerIndex => headerData
-   mapping(uint256 => mapping(uint256 => bytes32)) public headers;
+    // blockNumber => headerIndex => headerData
+    mapping(uint256 => mapping(uint256 => bytes32)) public headers;
 
-   constructor(address _protocol) {
-      protocol = IHeaderProtocol(_protocol);
-   }
+    constructor(address _protocol) {
+        protocol = IHeaderProtocol(_protocol);
+    }
 
-   function myRequest(uint256 blockNumber, uint256 headerIndex) external {
-      protocol.request(blockNumber, headerIndex);
-   }
+    function mockRequest(
+        uint256 blockNumber,
+        uint256 headerIndex
+    ) external payable {
+        protocol.request{value: msg.value}(blockNumber, headerIndex);
+    }
 
-   // required implementation of IHeader
-   function responseBlockHeader(
-      uint256 blockNumber,
-      uint256 headerIndex,
-      bytes32 headerData
-   ) external {
-      require(msg.sender == address(protocol), "Only Header Protocol");
-      headers[blockNumber][headerIndex] = headerData; // 30,000 gas limit, only save
-   }
+    // required implementation of IHeader
+    function responseBlockHeader(
+        uint256 blockNumber,
+        uint256 headerIndex,
+        bytes32 headerData
+    ) external {
+        require(msg.sender == address(protocol), "Only Header Protocol");
+        headers[blockNumber][headerIndex] = headerData; // 30,000 gas limit, only save
+    }
 }
 ```
 
-### Full Paid Example
+### Full Reward Example
 
 ```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
 import {IHeaderProtocol, IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeaderProtocol.sol";
 
-contract MyContract is IHeader {
-   IHeaderProtocol private protocol;
+contract MockHeader is IHeader {
+    IHeaderProtocol private protocol;
 
-   // blockNumber => headerIndex => headerData
-   mapping(uint256 => mapping(uint256 => bytes32)) public headers;
+    // blockNumber => headerIndex => headerData
+    mapping(uint256 => mapping(uint256 => bytes32)) public headers;
 
-   constructor(address _protocol) {
-      protocol = IHeaderProtocol(_protocol);
-   }
+    constructor(address _protocol) {
+        protocol = IHeaderProtocol(_protocol);
+    }
 
-   function myRequest(uint256 blockNumber, uint256 headerIndex) external payable {
-      protocol.request{value: msg.value}(blockNumber, headerIndex);
-   }
+    function mockRequest(
+        uint256 blockNumber,
+        uint256 headerIndex
+    ) external payable {
+        protocol.request{value: msg.value}(blockNumber, headerIndex);
+    }
 
-   function myCommit(uint256 blockNumber) external {
-      protocol.commit(blockNumber);
-   }
+    function mockCommit(uint256 blockNumber) external {
+        protocol.commit(blockNumber);
+    }
 
-   function myRefund(uint256 blockNumber, uint256 headerIndex) external {
-      protocol.refund(blockNumber, headerIndex);
-   }
+    function mockRefund(uint256 blockNumber, uint256 headerIndex) external {
+        protocol.refund(blockNumber, headerIndex);
+    }
 
-   // required implementation of IHeader
-   function responseBlockHeader(
-      uint256 blockNumber,
-      uint256 headerIndex,
-      bytes32 headerData
-   ) external {
-      require(msg.sender == address(protocol), "Only Header Protocol");
-      headers[blockNumber][headerIndex] = headerData; // 30,000 gas limit, only save
-   }
+    // required implementation of IHeader
+    function responseBlockHeader(
+        uint256 blockNumber,
+        uint256 headerIndex,
+        bytes32 headerData
+    ) external {
+        require(msg.sender == address(protocol), "Only Header Protocol");
+        headers[blockNumber][headerIndex] = headerData; // 30,000 gas limit, only save
+    }
 
-   receive() external payable {} // accept refunds
+    receive() external payable {} // accept refunds
 }
 ```
 
