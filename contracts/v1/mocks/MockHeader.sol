@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IHeaderProtocol, IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeaderProtocol.sol";
+import {IHeaderProtocol, IHeader} from "../interfaces/IHeaderProtocol.sol";
 
 contract MockHeader is IHeader {
     IHeaderProtocol private protocol;

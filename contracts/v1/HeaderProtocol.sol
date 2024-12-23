@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IHeaderProtocol, IHeader} from "@headerprotocol/contracts/v1/interfaces/IHeaderProtocol.sol";
-import {RLPReader} from "@headerprotocol/contracts/v1/utils/RLPReader.sol";
-import {ReentrancyGuard} from "@headerprotocol/contracts/v1/utils/ReentrancyGuard.sol";
-import {ExcessivelySafeCall} from "@headerprotocol/contracts/v1/utils/ExcessivelySafeCall.sol";
+import {IHeaderProtocol, IHeader} from "./interfaces/IHeaderProtocol.sol";
+import {RLPReader} from "./utils/RLPReader.sol";
+import {ReentrancyGuard} from "./utils/ReentrancyGuard.sol";
+import {ExcessivelySafeCall} from "./utils/ExcessivelySafeCall.sol";
 
 /// @title HeaderProtocol
 /// @notice A protocol to request Ethereum block headers onchain, enabling tasks such as
