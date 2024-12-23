@@ -108,19 +108,32 @@ contract HeaderProtocol is IHeaderProtocol, ReentrancyGuard {
 
     function _request(uint256 blockNumber, uint256 headerIndex) internal {
         if (blockNumber < block.number) revert InvalidBlockNumber();
-        if (headerIndex > MAX_INDEX) revert InvalidHeaderIndex();
+        if (headerIndex % MAX_INDEX == 6 || headerIndex % MAX_INDEX == 12) {
+            revert InvalidHeaderIndex();
+        }
         if (msg.value >= MAX_REWARD) revert RewardExceedTheLimit();
 
         bytes32 storedHeader = _getHeader(blockNumber, headerIndex);
 
         if (storedHeader != B0) {
-            _send(msg.sender, msg.value); // Refund because the task has already been completed.
+            // Refund because the task has already been completed.
+            if (msg.value > 0) _send(msg.sender, msg.value);
             _call(blockNumber, headerIndex, msg.sender, storedHeader);
             return;
         }
 
+        uint256 currentIndex = headerIndex;
+
+        while (true) {
+            storedHeader = headers[blockNumber][currentIndex];
+            if (storedHeader == B0) {
+                break;
+            }
+            currentIndex += MAX_INDEX;
+        }
+
         if (msg.value > 0) {
-            headers[blockNumber][headerIndex] = _encodeTask(
+            headers[blockNumber][currentIndex] = _encodeTask(
                 msg.sender,
                 msg.value
             );
@@ -129,7 +142,7 @@ contract HeaderProtocol is IHeaderProtocol, ReentrancyGuard {
         emit BlockHeaderRequested(
             msg.sender,
             blockNumber,
-            headerIndex,
+            currentIndex,
             msg.value
         );
     }
@@ -164,7 +177,7 @@ contract HeaderProtocol is IHeaderProtocol, ReentrancyGuard {
         if (_bh != item.rlpBytesKeccak256()) revert HeaderHashMismatch();
         RLPReader.Iterator memory iterator = item.iterator();
 
-        for (uint256 i = 0; i < headerIndex; i++) {
+        for (uint256 i = 0; i < (headerIndex % MAX_INDEX); i++) {
             // slither-disable-next-line unused-return
             iterator.next();
         }
@@ -236,6 +249,7 @@ contract HeaderProtocol is IHeaderProtocol, ReentrancyGuard {
             blockNumber < block.number &&
             bh == B0
         ) {
+            headers[blockNumber][headerIndex] = B0;
             _send(contractAddress, rewardAmount);
         } else {
             revert TaskIsNonRefundable();

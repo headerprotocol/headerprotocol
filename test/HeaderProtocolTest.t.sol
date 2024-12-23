@@ -65,7 +65,7 @@ contract HeaderProtocolTest is Test {
         vm.roll(200);
         vm.expectRevert(IHeaderProtocol.InvalidHeaderIndex.selector);
         vm.prank(address(consumer));
-        protocol.request(200, 21); // 21 > 19
+        protocol.request(200, 32); // 32 % 20 = 12
     }
 
     function testRevertRewardExceedTheLimit() public {
@@ -113,15 +113,15 @@ contract HeaderProtocolTest is Test {
     }
 
     function testRevertHeaderDataIsEmpty() public {
-        // extraData index=12 empty
+        // difficulty index=7 empty
         vm.roll(700);
         vm.prank(address(consumer));
-        protocol.request(700, 12);
+        protocol.request(700, 7);
         vm.roll(701);
         vm.setBlockhash(700, fakeBlockHash);
 
         vm.expectRevert(IHeaderProtocol.HeaderDataIsEmpty.selector);
-        protocol.response(700, 12, blockHeader, address(consumer));
+        protocol.response(700, 7, blockHeader, address(consumer));
     }
 
     function testRevertExternalCallFailed() public {

@@ -38,7 +38,7 @@ interface IHeaderProtocol {
     /// @notice Thrown if the `blockNumber` is invalid (e.g., in the past, beyond certain limits, or not acceptable by the protocol). (0x4e47846c)
     error InvalidBlockNumber();
 
-    /// @notice Thrown if the `headerIndex` exceeds the allowed range. (0x9e2ada3e)
+    /// @notice Thrown if the `headerIndex` 6 or 12. (0x9e2ada3e)
     error InvalidHeaderIndex();
 
     /// @notice Thrown if the reward (msg.value) exceeds the allowed maximum (e.g., 18 ETH as per the new implementation). (0x9a2b3740)
